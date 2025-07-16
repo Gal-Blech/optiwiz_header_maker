@@ -40,43 +40,46 @@ def format_color_hex(argb_hex):
 # --- Manual YAML Builder ---
 
 def format_yaml_value(value):
-    """Formats a Python value into a YAML-compatible string."""
+    """Formats a Python value into a YAML-compatible string for general cases."""
     if isinstance(value, bool):
         return str(value).lower()
     if isinstance(value, (int, float)):
         return str(value)
-    # The placeholder value should not be quoted
-    if value == 'return "<placeholder>"':
-        return value
-    # All other strings get single quotes
+    # Default for other strings is single quotes
     return f"'{value}'"
 
 def build_yaml_string(all_rows_data):
     """
     Manually builds the YAML string from the processed data to ensure
-    the exact required output format.
+    the exact required output format, including special quoting rules.
     """
     lines = ["template:", "    format:", "        page_header:"]
     for row in all_rows_data:
-        if not row:  # Handle empty rows represented by an empty list
+        if not row:
             lines.append("            - []")
             continue
         
-        lines.append("            -")  # Start of a row
+        lines.append("            -")
         for cell in row:
             if cell is None:
                 lines.append("                - null")
                 continue
             
-            lines.append("                -")  # Start of a cell
+            lines.append("                -")
             for key, value in cell.items():
+                # Apply special formatting rules first
                 if key == 'merge':
                     lines.append("                    merge:")
                     lines.append(f"                        from_to: {format_yaml_value(value['from_to'])}")
+                elif key == 'type' and value in ['expert', 'logo']:
+                    lines.append(f"                    {key}: {value}")  # No quotes
+                elif key == 'value' and value == 'return "<placeholder>"':
+                    lines.append(f"                    {key}: '{value}'") # With single quotes
                 else:
+                    # Use general formatting for all other cases
                     lines.append(f"                    {key}: {format_yaml_value(value)}")
     
-    lines.append("            - []")  # Final required empty row
+    lines.append("            - []")
     return "\n".join(lines)
 
 

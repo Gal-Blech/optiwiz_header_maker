@@ -57,15 +57,16 @@ def generate_yaml_from_file(file_object):
     yaml.preserve_quotes = True
     yaml.default_flow_style = False
     
-    data = {'template': {'format': {'page_header': []}}}
-    page_header = data['template']['format']['page_header']
+    # **FIXED** Initialize the main list as a CommentedSeq to control its style.
+    page_header_seq = CommentedSeq()
+    data = {'template': {'format': {'page_header': page_header_seq}}}
     
     for row in sheet.iter_rows():
         row_data = []
         is_empty_row = all(cell.value is None and not cell.has_style for cell in row)
 
         if is_empty_row:
-            page_header.append([])
+            page_header_seq.append([])
             continue
 
         for cell in row:
@@ -127,12 +128,13 @@ def generate_yaml_from_file(file_object):
             else:
                 row_data.append(cell_obj)
         
-        # **FIXED** This block now explicitly forces the correct hierarchical style.
-        cs = CommentedSeq(row_data)
-        cs.fa.set_block_style()
-        page_header.append(cs)
+        # **FIXED** Create a new CommentedSeq for each row and explicitly set its style.
+        # This forces the `- -` hierarchical structure.
+        row_seq = CommentedSeq(row_data)
+        row_seq.fa.set_block_style()
+        page_header_seq.append(row_seq)
 
-    page_header.append([])
+    page_header_seq.append([])
 
     string_stream = io.StringIO()
     yaml.dump(data, string_stream)

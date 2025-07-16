@@ -68,12 +68,12 @@ def generate_yaml_from_file(file_object):
             continue
 
         for cell in row:
-            # **FIXED** This logic now uses the correct object type to avoid the error.
             merged_range_obj = get_merged_range_obj(sheet, cell)
 
-            # If this cell is part of a merge, but not the top-left "master" cell,
-            # it should be represented as null and we can skip further processing.
-            if merged_range_obj and cell.coordinate != merged_range_obj.min_addr:
+            # **FIXED** If this cell is part of a merge, but not the top-left "master" cell,
+            # it should be represented as null. The master cell's address is the first
+            # part of the coordinate string (e.g., 'A1' in 'A1:B2').
+            if merged_range_obj and cell.coordinate != merged_range_obj.coord.split(':')[0]:
                 row_data.append(None)
                 continue
 

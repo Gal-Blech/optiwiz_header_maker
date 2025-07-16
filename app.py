@@ -19,6 +19,7 @@
 import streamlit as st
 from openpyxl import load_workbook
 from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedSeq
 import io
 
 # --- Helper Functions ---
@@ -70,21 +71,15 @@ def generate_yaml_from_file(file_object):
         for cell in row:
             merged_range_obj = get_merged_range_obj(sheet, cell)
 
-            # **FIXED** If this cell is part of a merge, but not the top-left "master" cell,
-            # it should be represented as null. The master cell's address is the first
-            # part of the coordinate string (e.g., 'A1' in 'A1:B2').
             if merged_range_obj and cell.coordinate != merged_range_obj.coord.split(':')[0]:
                 row_data.append(None)
                 continue
 
-            # This cell is either not in a merge, or it's the master cell.
             cell_obj = {}
 
-            # If it's the master cell of a merge, add the merge info.
             if merged_range_obj:
                 cell_obj['merge'] = {'from_to': merged_range_obj.coord}
 
-            # Add value and handle special keywords
             value = cell.value
             if value is not None:
                 if str(value).strip() == '<Logo>':
@@ -100,7 +95,6 @@ def generate_yaml_from_file(file_object):
                 else:
                     cell_obj['value'] = value
             
-            # Add formatting attributes if they are not default
             if cell.has_style:
                 if cell.font.bold: cell_obj['bold'] = True
                 if cell.font.name and cell.font.name.lower() != 'calibri': cell_obj['font_name'] = cell.font.name.lower()
@@ -128,13 +122,14 @@ def generate_yaml_from_file(file_object):
                         if border_color and border_color.upper() != '#000000':
                             cell_obj['border_color'] = border_color
 
-            # After trying to build the object, if it's still empty, the cell is null.
             if not cell_obj:
                 row_data.append(None)
             else:
                 row_data.append(cell_obj)
-
-        page_header.append(row_data)
+        
+        # **FIXED** Wrap the row data in a CommentedSeq object to enforce
+        # the correct block-style hierarchy for the list of cells.
+        page_header.append(CommentedSeq(row_data))
 
     page_header.append([])
 

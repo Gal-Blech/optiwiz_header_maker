@@ -23,11 +23,14 @@ import io
 
 # --- Helper Functions ---
 
-def get_merged_range(sheet, cell):
-    """Checks if a cell is part of a merged range and returns the range string."""
+def get_merged_range_obj(sheet, cell):
+    """
+    Checks if a cell is part of a merged range.
+    If so, returns the MergeCellRange object. Otherwise, returns None.
+    """
     for merged_cell_range in sheet.merged_cells.ranges:
         if cell.coordinate in merged_cell_range:
-            return str(merged_cell_range)
+            return merged_cell_range
     return None
 
 def format_color_hex(argb_hex):
@@ -51,16 +54,13 @@ def generate_yaml_from_file(file_object):
     yaml = YAML()
     yaml.indent(mapping=4, sequence=4, offset=2)
     yaml.preserve_quotes = True
-    # **FIXED** This is the crucial line to enforce block style (correct hierarchy)
     yaml.default_flow_style = False
     
     data = {'template': {'format': {'page_header': []}}}
     page_header = data['template']['format']['page_header']
-    processed_merges = set()
-
+    
     for row in sheet.iter_rows():
         row_data = []
-        # A row is considered empty if all cells have no value AND no style.
         is_empty_row = all(cell.value is None and not cell.has_style for cell in row)
 
         if is_empty_row:
@@ -68,18 +68,21 @@ def generate_yaml_from_file(file_object):
             continue
 
         for cell in row:
-            # Check if this cell is part of a merge we've already handled
-            merged_range = get_merged_range(sheet, cell)
-            if merged_range and cell.coordinate not in merged_range.min_addr:
+            # **FIXED** This logic now uses the correct object type to avoid the error.
+            merged_range_obj = get_merged_range_obj(sheet, cell)
+
+            # If this cell is part of a merge, but not the top-left "master" cell,
+            # it should be represented as null and we can skip further processing.
+            if merged_range_obj and cell.coordinate != merged_range_obj.min_addr:
                 row_data.append(None)
                 continue
 
+            # This cell is either not in a merge, or it's the master cell.
             cell_obj = {}
 
-            # Add merge info if this is the start of a new merge
-            if merged_range:
-                processed_merges.add(merged_range)
-                cell_obj['merge'] = {'from_to': merged_range.coord}
+            # If it's the master cell of a merge, add the merge info.
+            if merged_range_obj:
+                cell_obj['merge'] = {'from_to': merged_range_obj.coord}
 
             # Add value and handle special keywords
             value = cell.value

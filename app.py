@@ -37,13 +37,17 @@ def format_color_hex(argb_hex):
         return f"#{argb_hex[2:]}"
     return None
 
-# --- Manual YAML Builder (New "Brutal Adjustment" Version) ---
+def has_border(cell):
+    """Checks if a cell has any border style applied."""
+    return (cell.border.left.style or cell.border.right.style or 
+            cell.border.top.style or cell.border.bottom.style)
+
+# --- Manual YAML Builder ---
 
 def build_yaml_string(all_rows_data):
     """
     Manually builds the YAML string from the processed data to ensure
     the exact required output format, including special quoting rules.
-    This version is more explicit to avoid formatting errors.
     """
     lines = ["template:", "    format:", "        page_header:"]
     for row in all_rows_data:
@@ -59,19 +63,18 @@ def build_yaml_string(all_rows_data):
             
             lines.append("                -")
             for key, value in cell.items():
-                # Apply special formatting rules with explicit logic for each key
                 if key == 'merge':
                     lines.append("                    merge:")
                     lines.append(f"                        from_to: '{value['from_to']}'")
                 elif key == 'type':
-                    lines.append(f"                    {key}: {value}")  # No quotes for type (e.g., expert, logo)
+                    lines.append(f"                    {key}: {value}")
                 elif key == 'value' and value == 'return "<placeholder>"':
-                    lines.append(f"                    {key}: '{value}'") # Single quotes for placeholder
+                    lines.append(f"                    {key}: '{value}'")
                 elif isinstance(value, bool):
                      lines.append(f"                    {key}: {str(value).lower()}")
                 elif isinstance(value, (int, float)):
                      lines.append(f"                    {key}: {value}")
-                else: # All other strings get single quotes
+                else:
                      lines.append(f"                    {key}: '{value}'")
     
     lines.append("            - []")
@@ -101,9 +104,17 @@ def generate_yaml_from_file(file_object):
 
         for cell in row:
             merged_range_obj = get_merged_range_obj(sheet, cell)
+            leader_cell_address = merged_range_obj.coord.split(':')[0] if merged_range_obj else None
 
-            if merged_range_obj and cell.coordinate != merged_range_obj.coord.split(':')[0]:
-                row_data.append(None)
+            # **FIXED** New logic for merged cells
+            if merged_range_obj and cell.coordinate != leader_cell_address:
+                leader_cell = sheet[leader_cell_address]
+                # If the leader cell has a border, this cell should also have one.
+                if has_border(leader_cell):
+                    row_data.append({'border': 1})
+                else:
+                    # Otherwise, it's just null.
+                    row_data.append(None)
                 continue
 
             cell_obj = {}
@@ -146,7 +157,7 @@ def generate_yaml_from_file(file_object):
                 if cell.alignment.vertical and cell.alignment.vertical != 'bottom':
                     cell_obj['valign'] = 'vcenter' if cell.alignment.vertical == 'center' else cell.alignment.vertical
                 
-                if cell.border.left.style or cell.border.right.style or cell.border.top.style or cell.border.bottom.style:
+                if has_border(cell):
                     cell_obj['border'] = 1
                     if cell.border.left.color and cell.border.left.color.type == 'rgb':
                         border_color = format_color_hex(cell.border.left.color.rgb)

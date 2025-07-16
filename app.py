@@ -127,9 +127,10 @@ def generate_yaml_from_file(file_object):
             else:
                 row_data.append(cell_obj)
         
-        # **FIXED** Wrap the row data in a CommentedSeq object to enforce
-        # the correct block-style hierarchy for the list of cells.
-        page_header.append(CommentedSeq(row_data))
+        # **FIXED** This block now explicitly forces the correct hierarchical style.
+        cs = CommentedSeq(row_data)
+        cs.fa.set_block_style()
+        page_header.append(cs)
 
     page_header.append([])
 

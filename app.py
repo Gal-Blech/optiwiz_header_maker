@@ -5,10 +5,9 @@
 # Required Libraries:
 # - streamlit: To create the web application UI.
 # - openpyxl: To read .xlsx files and access cell formatting.
-# - ruamel.yaml: To generate clean, well-formatted YAML output.
 #
 # How to Install:
-# pip install streamlit openpyxl ruamel.yaml
+# pip install streamlit openpyxl
 #
 # How to Run:
 # 1. Save this code as a Python file (e.g., app.py).
@@ -18,8 +17,6 @@
 
 import streamlit as st
 from openpyxl import load_workbook
-from ruamel.yaml import YAML
-from ruamel.yaml.comments import CommentedSeq
 import io
 
 # --- Helper Functions ---
@@ -40,6 +37,49 @@ def format_color_hex(argb_hex):
         return f"#{argb_hex[2:]}"
     return None
 
+# --- Manual YAML Builder ---
+
+def format_yaml_value(value):
+    """Formats a Python value into a YAML-compatible string."""
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, (int, float)):
+        return str(value)
+    # The placeholder value should not be quoted
+    if value == 'return "<placeholder>"':
+        return value
+    # All other strings get single quotes
+    return f"'{value}'"
+
+def build_yaml_string(all_rows_data):
+    """
+    Manually builds the YAML string from the processed data to ensure
+    the exact required output format.
+    """
+    lines = ["template:", "    format:", "        page_header:"]
+    for row in all_rows_data:
+        if not row:  # Handle empty rows represented by an empty list
+            lines.append("            - []")
+            continue
+        
+        lines.append("            -")  # Start of a row
+        for cell in row:
+            if cell is None:
+                lines.append("                - null")
+                continue
+            
+            lines.append("                -")  # Start of a cell
+            for key, value in cell.items():
+                if key == 'merge':
+                    lines.append("                    merge:")
+                    lines.append(f"                        from_to: {format_yaml_value(value['from_to'])}")
+                else:
+                    lines.append(f"                    {key}: {format_yaml_value(value)}")
+    
+    lines.append("            - []")  # Final required empty row
+    return "\n".join(lines)
+
+
 # --- Core Translation Logic ---
 
 def generate_yaml_from_file(file_object):
@@ -48,25 +88,17 @@ def generate_yaml_from_file(file_object):
     Also returns any warnings generated during the process.
     """
     warnings = []
+    all_rows_data = []
     
     workbook = load_workbook(file_object)
     sheet = workbook.active
-
-    yaml = YAML()
-    yaml.indent(mapping=4, sequence=4, offset=2)
-    yaml.preserve_quotes = True
-    yaml.default_flow_style = False
-    
-    # **FIXED** Initialize the main list as a CommentedSeq to control its style.
-    page_header_seq = CommentedSeq()
-    data = {'template': {'format': {'page_header': page_header_seq}}}
     
     for row in sheet.iter_rows():
         row_data = []
         is_empty_row = all(cell.value is None and not cell.has_style for cell in row)
 
         if is_empty_row:
-            page_header_seq.append([])
+            all_rows_data.append([])
             continue
 
         for cell in row:
@@ -128,17 +160,10 @@ def generate_yaml_from_file(file_object):
             else:
                 row_data.append(cell_obj)
         
-        # **FIXED** Create a new CommentedSeq for each row and explicitly set its style.
-        # This forces the `- -` hierarchical structure.
-        row_seq = CommentedSeq(row_data)
-        row_seq.fa.set_block_style()
-        page_header_seq.append(row_seq)
+        all_rows_data.append(row_data)
 
-    page_header_seq.append([])
-
-    string_stream = io.StringIO()
-    yaml.dump(data, string_stream)
-    yaml_string = string_stream.getvalue()
+    # Use the manual builder to generate the final string
+    yaml_string = build_yaml_string(all_rows_data)
     
     return yaml_string, warnings
 

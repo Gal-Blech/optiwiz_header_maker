@@ -51,6 +51,8 @@ def generate_yaml_from_file(file_object):
     yaml = YAML()
     yaml.indent(mapping=4, sequence=4, offset=2)
     yaml.preserve_quotes = True
+    # **FIXED** This is the crucial line to enforce block style (correct hierarchy)
+    yaml.default_flow_style = False
     
     data = {'template': {'format': {'page_header': []}}}
     page_header = data['template']['format']['page_header']
@@ -58,6 +60,7 @@ def generate_yaml_from_file(file_object):
 
     for row in sheet.iter_rows():
         row_data = []
+        # A row is considered empty if all cells have no value AND no style.
         is_empty_row = all(cell.value is None and not cell.has_style for cell in row)
 
         if is_empty_row:
@@ -67,7 +70,7 @@ def generate_yaml_from_file(file_object):
         for cell in row:
             # Check if this cell is part of a merge we've already handled
             merged_range = get_merged_range(sheet, cell)
-            if merged_range and merged_range in processed_merges:
+            if merged_range and cell.coordinate not in merged_range.min_addr:
                 row_data.append(None)
                 continue
 
@@ -76,7 +79,7 @@ def generate_yaml_from_file(file_object):
             # Add merge info if this is the start of a new merge
             if merged_range:
                 processed_merges.add(merged_range)
-                cell_obj['merge'] = {'from_to': merged_range}
+                cell_obj['merge'] = {'from_to': merged_range.coord}
 
             # Add value and handle special keywords
             value = cell.value

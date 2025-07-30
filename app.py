@@ -6,7 +6,6 @@
 # - streamlit: To create the web application UI.
 # - openpyxl: To read .xlsx files and access cell formatting.
 #
-#
 # How to Install:
 # pip install streamlit openpyxl
 #
@@ -40,6 +39,7 @@ def format_color_hex(argb_hex):
 
 def has_border(cell):
     """Checks if a cell has any border style applied."""
+    # A cell has a border if any of its sides has a style other than None.
     return (cell.border.left.style or cell.border.right.style or 
             cell.border.top.style or cell.border.bottom.style)
 
@@ -49,6 +49,7 @@ def get_border_color(cell):
         border_side = getattr(cell.border, side)
         if border_side and border_side.color and border_side.color.type == 'rgb':
             color = format_color_hex(border_side.color.rgb)
+            # Ensure the color is not the default black before returning.
             if color and color.upper() != '#000000':
                 return color
     return None
@@ -105,21 +106,9 @@ def generate_yaml_from_file(file_object):
     workbook = load_workbook(file_object)
     sheet = workbook.active
     
-    # Find the maximum column index that actually has content or styling
-    max_col = 0
     for row in sheet.iter_rows():
-        for cell in row:
-            if cell.value is not None or cell.has_style:
-                max_col = max(max_col, cell.column)
-
-    for row in sheet.iter_rows(max_col=max_col):
         row_data = []
-        is_empty_row = all(cell.value is None and not cell.has_style for cell in row)
-
-        if is_empty_row:
-            all_rows_data.append([])
-            continue
-
+        
         for cell in row:
             merged_range_obj = get_merged_range_obj(sheet, cell)
             
@@ -173,7 +162,6 @@ def generate_yaml_from_file(file_object):
                 
                 if has_border(cell):
                     cell_obj['border'] = 1
-                    # **FIXED** Check all sides for border color
                     border_color = get_border_color(cell)
                     if border_color:
                         cell_obj['border_color'] = border_color
@@ -183,7 +171,15 @@ def generate_yaml_from_file(file_object):
             else:
                 row_data.append(cell_obj)
         
-        all_rows_data.append(row_data)
+        # **FIXED** Trim trailing nulls from the end of the row_data list.
+        while row_data and row_data[-1] is None:
+            row_data.pop()
+        
+        # If the row is now empty, represent it as an empty list.
+        if not row_data:
+            all_rows_data.append([])
+        else:
+            all_rows_data.append(row_data)
 
     # Use the manual builder to generate the final string
     yaml_string = build_yaml_string(all_rows_data)

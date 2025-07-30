@@ -42,6 +42,16 @@ def has_border(cell):
     return (cell.border.left.style or cell.border.right.style or 
             cell.border.top.style or cell.border.bottom.style)
 
+def get_border_color(cell):
+    """Checks all four sides of a cell for a color and returns the first one found."""
+    for side in ('left', 'right', 'top', 'bottom'):
+        border_side = getattr(cell.border, side)
+        if border_side and border_side.color and border_side.color.type == 'rgb':
+            color = format_color_hex(border_side.color.rgb)
+            if color and color.upper() != '#000000':
+                return color
+    return None
+
 # --- Manual YAML Builder ---
 
 def build_yaml_string(all_rows_data):
@@ -94,7 +104,14 @@ def generate_yaml_from_file(file_object):
     workbook = load_workbook(file_object)
     sheet = workbook.active
     
+    # Find the maximum column index that actually has content or styling
+    max_col = 0
     for row in sheet.iter_rows():
+        for cell in row:
+            if cell.value is not None or cell.has_style:
+                max_col = max(max_col, cell.column)
+
+    for row in sheet.iter_rows(max_col=max_col):
         row_data = []
         is_empty_row = all(cell.value is None and not cell.has_style for cell in row)
 
@@ -104,16 +121,12 @@ def generate_yaml_from_file(file_object):
 
         for cell in row:
             merged_range_obj = get_merged_range_obj(sheet, cell)
-            leader_cell_address = merged_range_obj.coord.split(':')[0] if merged_range_obj else None
-
-            # **FIXED** New logic for merged cells
-            if merged_range_obj and cell.coordinate != leader_cell_address:
-                leader_cell = sheet[leader_cell_address]
-                # If the leader cell has a border, this cell should also have one.
+            
+            if merged_range_obj and cell.coordinate != merged_range_obj.coord.split(':')[0]:
+                leader_cell = sheet[merged_range_obj.coord.split(':')[0]]
                 if has_border(leader_cell):
                     row_data.append({'border': 1})
                 else:
-                    # Otherwise, it's just null.
                     row_data.append(None)
                 continue
 
@@ -159,10 +172,10 @@ def generate_yaml_from_file(file_object):
                 
                 if has_border(cell):
                     cell_obj['border'] = 1
-                    if cell.border.left.color and cell.border.left.color.type == 'rgb':
-                        border_color = format_color_hex(cell.border.left.color.rgb)
-                        if border_color and border_color.upper() != '#000000':
-                            cell_obj['border_color'] = border_color
+                    # **FIXED** Check all sides for border color
+                    border_color = get_border_color(cell)
+                    if border_color:
+                        cell_obj['border_color'] = border_color
 
             if not cell_obj:
                 row_data.append(None)
